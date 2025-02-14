@@ -14,7 +14,7 @@ either download it from nightly builds:
 wget https://download.pytorch.org/libtorch/nightly/cpu/libtorch-shared-with-deps-latest.zip
 ```
 or from pytorch download page
-```
+```console
 wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.6.0%2Bcpu.zip
 ```
 - Now you create build folder and build using cmake:
