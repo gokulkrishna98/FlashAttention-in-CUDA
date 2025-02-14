@@ -1,5 +1,5 @@
-./build
-./cmake
-./compile_commands.json
-./libtorch
-./.cache
+build
+cmake
+compile_commands.json
+libtorch
+.cache
