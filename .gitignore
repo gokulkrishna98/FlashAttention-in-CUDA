@@ -2,4 +2,4 @@
 ./cmake
 ./compile_commands.json
 ./libtorch
-.cache/
+./.cache
