@@ -7,6 +7,8 @@
 
 
 extern "C" void launch_transpose(float *in, float *out, int E, int S);
+extern "C" void launch_matmul(float *a, float *b, float *out, int ha, int wa, int hb, int wb, float sf = 1.0f);
+extern "C" void launch_softmax(float *in, float *out, int h, int w);
 
 /*
  * We are assuming batch size = 1
@@ -64,6 +66,7 @@ void standard_attention(const torch::Tensor &q, const torch::Tensor &k, const to
     int L = q.size(0); int E = q.size(1);
     int S = k.size(0); int E_v = k.size(1);
 
+    // @cleanup: for printing stuff, remove it later
     float *temp = (float *)malloc(sizeof(float)*S*E);
     /*
         All the data is allocated before hand. The computation is as follows
@@ -93,15 +96,25 @@ void standard_attention(const torch::Tensor &q, const torch::Tensor &k, const to
     /* Tranpose of K */
     launch_transpose(dev_k, dev_i1, E, S);
 
-    cudaMemcpy(temp, dev_i1, sizeof(float)*S*E, cudaMemcpyDeviceToHost);
+    /* Q @ K^T */
+    float scale_factor = 1.0 / std::sqrt(E);
+    launch_matmul(dev_q, dev_i1, dev_i2, L, E, E, S, scale_factor);
 
-    // for(int i=0; i<E; i++){
-    //     for(int j=0; j<S; j++){
-    //         int index = i*S + j;
-    //         std::cout << temp[index] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
+    /* softmax */
+    launch_softmax(dev_i2, dev_i3, L, S);
+
+    /* I3 @ V*/
+    launch_matmul(dev_i3, dev_v, dev_out, L, S, S, E_v, 1.0f);
+
+    cudaMemcpy(temp, dev_out, sizeof(float)*L*E_v, cudaMemcpyDeviceToHost);
+
+    for(int i=0; i<L; i++){
+        for(int j=0; j<E_v; j++){
+            int index = i*E_v + j;
+            std::cout << temp[index] << " ";
+        }
+        std::cout << std::endl;
+    }
 
     // Freeing allocated device memory
     cudaFree(dev_q);
@@ -114,6 +127,7 @@ void standard_attention(const torch::Tensor &q, const torch::Tensor &k, const to
     return;
 }
 
+// @todo 
 void flash_attention(){
     return;
 }
@@ -121,27 +135,25 @@ void flash_attention(){
 int main(){
     torch::manual_seed(42);
 
-    // // Define the input tensors (query, key, value)
+    // Shapes (var names based on pytorch: scaled_dot_produce_attention)
     int64_t L = 3;
-    int64_t S = 10000;
-    int64_t E = 10000;
+    int64_t S = 4;
+    int64_t E = 3;
     int64_t E_v = 3;
 
-    // // Create random tensors for query, key, and value
+    // Create random tensors for query, key, and value
     const torch::Tensor query = torch::randn({L, E});
     const torch::Tensor key = torch::randn({S,E});
     const torch::Tensor value = torch::randn({S, E_v});
     
 
     float *dev_q, *dev_k, *dev_v;
-    // std::cout << "Key Value\n" << key << std::endl;
 
-    // // Compute scaled dot-product attention
+    // Compute scaled dot-product attention
+    standard_attention(query, key, value);
     torch::Tensor attn_output = pytorch_attention(query, key, value);
-    // standard_attention(query, key, value);
 
-    // // Print the output
-    // std::cout << "Attention Output: " << attn_output << std::endl;
+    std::cout << "Attention Output: \n" << attn_output << std::endl;
 
     return 0;
 }
