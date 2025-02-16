@@ -29,5 +29,8 @@ make -j32
 ./fa
 ```
 
+# References
+- Optimizing Matrix Multiplication - [here](https://siboehm.com/articles/22/CUDA-MMM)
+
 # Results
 [TODO]
