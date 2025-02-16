@@ -34,16 +34,16 @@ extern "C" void launch_softmax(float *in, float *out, int h, int w);
     -   c. Shared Memory. 
     - 3. Performance checklist.
  */
-
-/*
-    Transpose Kernel
-*/ 
+ bool is_equal(const float* data, torch::Tensor tensor, int size, float rtol = 1e-3, float atol = 1e-3) {
+    torch::Tensor data_tensor = torch::from_blob((void*)data, {size}, torch::kFloat32);
+    tensor = tensor.view({size}); 
+    return torch::allclose(data_tensor, tensor, rtol, atol);
+}
 
 
 torch ::Tensor pytorch_attention(const torch::Tensor &q, const torch::Tensor &k, const torch::Tensor &v){
     int64_t head_dim = q.size(-1);
     double scale_factor = 1.0 / std::sqrt(head_dim);
-
     auto similarity = torch::matmul(q, k.transpose(-2, -1)) * scale_factor;
     auto attn_weights = torch::softmax(similarity, -1);
     auto output = torch::matmul(attn_weights, v);
@@ -67,7 +67,7 @@ void standard_attention(const torch::Tensor &q, const torch::Tensor &k, const to
     int S = k.size(0); int E_v = k.size(1);
 
     // @cleanup: for printing stuff, remove it later
-    float *temp = (float *)malloc(sizeof(float)*S*E);
+    float *out = (float *)malloc(sizeof(float)*L*E_v);
     /*
         All the data is allocated before hand. The computation is as follows
         Q = (L, E), K = (S, E), V = (S, E_v)
@@ -105,18 +105,14 @@ void standard_attention(const torch::Tensor &q, const torch::Tensor &k, const to
 
     /* I3 @ V*/
     launch_matmul(dev_i3, dev_v, dev_out, L, S, S, E_v, 1.0f);
+    cudaMemcpy(out, dev_out, sizeof(float)*L*E_v, cudaMemcpyDeviceToHost);
 
-    cudaMemcpy(temp, dev_out, sizeof(float)*L*E_v, cudaMemcpyDeviceToHost);
-
-    for(int i=0; i<L; i++){
-        for(int j=0; j<E_v; j++){
-            int index = i*E_v + j;
-            std::cout << temp[index] << " ";
-        }
-        std::cout << std::endl;
-    }
+    /* Comparing the my implementation with pytorch cpu values */
+    auto torch_out = pytorch_attention(q, k, v);
+    std::cout << "Is same? :- " << is_equal(out, torch_out, L*E_v) << std::endl;
 
     // Freeing allocated device memory
+    free(out);
     cudaFree(dev_q);
     cudaFree(dev_k);
     cudaFree(dev_v);
@@ -136,10 +132,10 @@ int main(){
     torch::manual_seed(42);
 
     // Shapes (var names based on pytorch: scaled_dot_produce_attention)
-    int64_t L = 3;
-    int64_t S = 4;
-    int64_t E = 3;
-    int64_t E_v = 3;
+    int64_t L = 117; 
+    int64_t S = 1287;
+    int64_t E = 1333; 
+    int64_t E_v = 1333;
 
     // Create random tensors for query, key, and value
     const torch::Tensor query = torch::randn({L, E});
@@ -151,9 +147,5 @@ int main(){
 
     // Compute scaled dot-product attention
     standard_attention(query, key, value);
-    torch::Tensor attn_output = pytorch_attention(query, key, value);
-
-    std::cout << "Attention Output: \n" << attn_output << std::endl;
-
     return 0;
 }
