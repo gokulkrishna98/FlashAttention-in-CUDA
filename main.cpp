@@ -9,6 +9,7 @@
 extern "C" void launch_transpose(float *in, float *out, int E, int S);
 extern "C" void launch_matmul(float *a, float *b, float *out, int ha, int wa, int hb, int wb, float sf = 1.0f);
 extern "C" void launch_softmax(float *in, float *out, int h, int w);
+extern "C" void launch_flash(float *Q, float *K, float* V, float *O, float *M, float*L, int N, int d, int T, int B = 32, float sf = 1.0f); 
 
 /*
  * We are assuming batch size = 1
@@ -48,6 +49,61 @@ torch ::Tensor pytorch_attention(const torch::Tensor &q, const torch::Tensor &k,
     auto attn_weights = torch::softmax(similarity, -1);
     auto output = torch::matmul(attn_weights, v);
     return output;
+}
+
+void flash_attention(const torch::Tensor &q, const torch::Tensor &k, const torch::Tensor &v){
+    float *q_ptr = q.contiguous().data_ptr<float>();
+    float *k_ptr = k.contiguous().data_ptr<float>();
+    float *v_ptr = v.contiguous().data_ptr<float>();
+
+    float *dev_q, *dev_k, *dev_v;
+    float *dev_l, *dev_m, *dev_i3, *dev_out;
+
+
+    auto q_shape = std::make_pair(q.size(0), q.size(1));
+    auto k_shape = std::make_pair(k.size(0), k.size(1));
+    auto v_shape = std::make_pair(v.size(0), v.size(1));
+
+    int L = q.size(0); int E = q.size(1);
+    int S = k.size(0); int E_v = k.size(1);
+
+    float *out = (float *)malloc(sizeof(float)*L*E_v);
+
+    cudaMalloc((void**)&dev_q, q.numel()*sizeof(float));
+    cudaMalloc((void**)&dev_k, k.numel()*sizeof(float));
+    cudaMalloc((void**)&dev_v, v.numel()*sizeof(float));
+    cudaMalloc((void**)&dev_out, (L*E_v)*sizeof(float));
+
+    cudaMemcpy(dev_q, q_ptr, q.numel()*sizeof(float),cudaMemcpyHostToDevice); 
+    cudaMemcpy(dev_k, k_ptr, k.numel()*sizeof(float),cudaMemcpyHostToDevice); 
+    cudaMemcpy(dev_v, v_ptr, v.numel()*sizeof(float),cudaMemcpyHostToDevice); 
+
+    cudaMalloc((void**)&dev_l, (L)*sizeof(float));
+    cudaMalloc((void**)&dev_m, (L)*sizeof(float));
+
+    launch_flash(dev_q, dev_k, dev_v, dev_out, dev_m, dev_l, L, E, L/32, 32, 1/std::sqrt(E)); 
+
+    cudaMemcpy(out, dev_out, sizeof(float)*L*E_v, cudaMemcpyDeviceToHost);
+
+    auto torch_out = pytorch_attention(q, k, v);
+    std::cout << "Is same? :- " << is_equal(out, torch_out, L*E_v) << std::endl;
+    // for(int i=0; i<L; i++){
+    //     for(int j=0; j<E_v; j++){
+    //         std::cout << out[i*E_v + j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // std::cout << "Output: \n" << torch_out << std::endl;
+
+    free(out);
+    cudaFree(dev_q);
+    cudaFree(dev_k);
+    cudaFree(dev_v);
+    cudaFree(dev_l);
+    cudaFree(dev_m);
+    cudaFree(dev_out);
+
+    return;
 }
 
 void standard_attention(const torch::Tensor &q, const torch::Tensor &k, const torch::Tensor &v){
@@ -111,6 +167,10 @@ void standard_attention(const torch::Tensor &q, const torch::Tensor &k, const to
     auto torch_out = pytorch_attention(q, k, v);
     std::cout << "Is same? :- " << is_equal(out, torch_out, L*E_v) << std::endl;
 
+    /*
+    printing value
+    */
+
     // Freeing allocated device memory
     free(out);
     cudaFree(dev_q);
@@ -132,10 +192,16 @@ int main(){
     torch::manual_seed(42);
 
     // Shapes (var names based on pytorch: scaled_dot_produce_attention)
-    int64_t L = 117; 
-    int64_t S = 1287;
-    int64_t E = 1333; 
-    int64_t E_v = 1333;
+    int64_t L = 32; 
+    int64_t S = 32;
+    int64_t E = 4; 
+    int64_t E_v = 4;
+
+    // more robust values
+    // int64_t L = 117; 
+    // int64_t S = 1287;
+    // int64_t E = 1333; 
+    // int64_t E_v = 1333;
 
     // Create random tensors for query, key, and value
     const torch::Tensor query = torch::randn({L, E});
@@ -146,6 +212,7 @@ int main(){
     float *dev_q, *dev_k, *dev_v;
 
     // Compute scaled dot-product attention
-    standard_attention(query, key, value);
+    // standard_attention(query, key, value);
+    flash_attention(query, key, value);
     return 0;
 }

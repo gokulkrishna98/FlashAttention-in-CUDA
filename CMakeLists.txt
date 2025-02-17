@@ -8,7 +8,7 @@ find_package(CUDA REQUIRED)
 set(CMAKE_CUDA_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-add_library(cuda_kernels STATIC transpose.cu matmul.cu softmax.cu)
+add_library(cuda_kernels STATIC transpose.cu matmul.cu softmax.cu flash.cu)
 set_target_properties(cuda_kernels PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 set_property(TARGET cuda_kernels PROPERTY LANGUAGE CUDA)
 
