@@ -31,6 +31,8 @@ make -j32
 
 # References
 - Optimizing Matrix Multiplication - [here](https://siboehm.com/articles/22/CUDA-MMM)
+- Flash Attention by Tri Dao - [here](https://arxiv.org/abs/2205.14135)
+- Minimal flash attention inspiration - [here](https://github.com/tspeterkim/flash-attention-minimal)
 
 # Results
 [TODO]
