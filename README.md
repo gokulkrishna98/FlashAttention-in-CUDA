@@ -34,5 +34,7 @@ make -j32
 - Flash Attention by Tri Dao - [here](https://arxiv.org/abs/2205.14135)
 - Minimal flash attention inspiration - [here](https://github.com/tspeterkim/flash-attention-minimal)
 
-# Results
-[TODO]
+> TODO:
+> - Add command line arguments to executable.
+> - Add improve the flash attention kernel support to good amount of dimension 
+> - Write a article and link it here.
